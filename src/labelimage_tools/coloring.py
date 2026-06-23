@@ -13,6 +13,7 @@ from matplotlib.image import AxesImage
 
 from .adjacency import adjacency_from_labels
 from .typing import Adj, Node
+from .validation import unique_labels
 
 
 def dsatur_color(adj: Adj, seed: int | None = None) -> dict[Node, int]:
@@ -225,7 +226,7 @@ def apply_color_lut_int(
     if lut is None:
         if color_mapping is None:
             raise ValueError("Either color_mapping or lut must be provided")
-        max_label = int(max(int(array.max()), *(int(label) for label in color_mapping)))
+        max_label = int(max([int(array.max()), *(int(label) for label in color_mapping)]))
         lut = np.full(max_label + 1, np.nan, dtype=np.float32)
         for label, color in color_mapping.items():
             if int(label) >= 0:
@@ -329,7 +330,8 @@ def show_map_with_colors(
         skipped and this LUT is used directly.
     K : int, optional
         Desired palette size. For tiny images with fewer labels than ``K``, the
-        displayed palette is reduced so plotting remains convenient.
+        displayed palette is reduced so plotting remains convenient. Isolated
+        labels with no adjacency edges are still included in the color mapping.
     seed : int, optional
         Random seed for color refinement/rebalancing.
     balance : {"proportional", "even"}, optional
@@ -358,9 +360,16 @@ def show_map_with_colors(
     if lut is None:
         if adj is None:
             adj = adjacency_from_labels(map_array, background=0)
-        K_effective = min(K, max(1, len(adj)))
-        color_mapping = color_planar_with_variety(
-            adj, K=K_effective, seed=seed, balance=balance, rebalance=rebalance
+        adj = {node: list(neighbors) for node, neighbors in adj.items()}
+        for label in unique_labels(map_array, background=0):
+            adj.setdefault(int(label), [])
+        K_effective = min(K, len(adj))
+        color_mapping = (
+            color_planar_with_variety(
+                adj, K=K_effective, seed=seed, balance=balance, rebalance=rebalance
+            )
+            if K_effective > 0
+            else {}
         )
     else:
         color_mapping = None
@@ -370,6 +379,7 @@ def show_map_with_colors(
         cmap = plt.get_cmap(cmap).copy()
         cmap.set_over(hole_color)
         mapped[np.asarray(map_array) > 9999] = K + 1
-    norm = Normalize(vmin=0, vmax=(K_effective if cyclic_cmap else K_effective - 1))
+    vmax = max(1, K_effective if cyclic_cmap else K_effective - 1)
+    norm = Normalize(vmin=0, vmax=vmax)
     image = ax.imshow(mapped, cmap=cmap, norm=norm, **imshow_kwargs)
     return image, lut, ax

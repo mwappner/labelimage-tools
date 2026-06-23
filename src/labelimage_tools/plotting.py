@@ -156,6 +156,7 @@ def plot_label_image(
     background=0,
     use_graph_coloring: bool = True,
     K: int = 8,
+    cyclic_cmap: bool = False,
     seed: int | None = None,
     title: str | None = None,
     show_colorbar: bool = False,
@@ -180,6 +181,10 @@ def plot_label_image(
         receive different colors. If ``False``, pass raw labels to ``imshow``.
     K : int, optional
         Desired graph-color palette size.
+    cyclic_cmap : bool, optional
+        If ``True``, assume the cmap is cyclic, so that the generated color set the
+        graph-color palette does not use the start and end of the colormap, since
+        they are the same color. Default is ``False``.
     seed : int, optional
         Random seed for graph-color refinement.
     title : str, optional
@@ -209,6 +214,7 @@ def plot_label_image(
             K=K,
             seed=seed,
             interpolation=interpolation,
+            cyclic_cmap=cyclic_cmap,
             **imshow_kwargs,
         )
     else:

@@ -34,3 +34,16 @@ def test_show_map_with_colors_runs(simple_labels):
     image, lut, ax = lit.show_map_with_colors(simple_labels, K=4, seed=1)
     assert image.axes is ax
     assert lut.size > 0
+
+
+def test_show_map_with_colors_handles_isolated_or_empty_foreground():
+    isolated = np.zeros((5, 5), dtype=np.int64)
+    isolated[2, 2] = 5
+    image, lut, ax = lit.show_map_with_colors(isolated, K=8, seed=1)
+    assert image.axes is ax
+    assert lut[5] == 0
+
+    empty = np.zeros((5, 5), dtype=np.int64)
+    image, lut, ax = lit.show_map_with_colors(empty, K=8, seed=1)
+    assert image.axes is ax
+    assert lut.size >= 1

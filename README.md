@@ -99,3 +99,60 @@ You can also use the lower-level coloring helper:
 ```python
 image, lut, ax = lit.show_map_with_colors(labels, K=8, seed=1)
 ```
+
+## Examples and cookbook
+
+The `examples/` directory contains script-style examples. Edit the constants at
+the top of each script, run it, or copy sections into a notebook.
+
+```bash
+python examples/01_graph_coloring.py
+python examples/02_preprocessing_gallery.py
+python examples/03_junctions_and_contours.py
+```
+
+The cookbook in [`docs/cookbook.md`](docs/cookbook.md) walks through the same
+workflows and embeds the generated images.
+
+### Essential processing outputs
+
+Graph-colored label image using the cyclic `managua` colormap:
+
+```python
+fig, ax = lit.plot_label_image(
+    labels,
+    use_graph_coloring=True,
+    K=8,
+    seed=4,
+    cmap="managua",
+    cyclic_cmap=True,
+    title="Graph-colored label image",
+)
+```
+
+![Graph-colored labels](examples/plots/graph_colored_managua.png)
+
+Detected junctions:
+
+```python
+junction_label_image, junctions = lit.junctions_from_labels(
+    labels,
+    background=0,
+    min_labels=3,
+    connectivity=2,
+)
+fig, ax = lit.plot_label_image(labels, cmap="managua", cyclic_cmap=True)
+lit.plot_junctions(junctions=junctions, junction_mask=junction_label_image > 0, ax=ax)
+```
+
+![Detected junctions](examples/plots/junctions.png)
+
+Ordered contours:
+
+```python
+contours = lit.ordered_contours_from_labels(labels, background=0)
+fig, ax = lit.plot_label_image(labels, cmap="managua", cyclic_cmap=True)
+lit.plot_contours(labels, ax=ax, background=0, color="black", linewidth=0.6)
+```
+
+![Contours](examples/plots/contours.png)
