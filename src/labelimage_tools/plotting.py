@@ -36,7 +36,52 @@ def draw_graph(
     text_args=None,
     dot_args=None,
 ) -> tuple[LineCollection, Axes]:
-    """Draw an adjacency/contact graph between label centroids."""
+    """
+    Draw an adjacency graph between label centroids.
+
+    Parameters
+    ----------
+    im : np.ndarray or None
+        Label image used to compute centroids. If ``None``, ``centroids`` must be
+        supplied explicitly.
+    neighbors : dict
+        Adjacency mapping where keys are labels and values are neighboring
+        labels.
+    contacts : dict, optional
+        Contact weights aligned with ``neighbors``. If omitted, all graph edges
+        are drawn with unit weight.
+    ax : matplotlib.axes.Axes, optional
+        Axis to draw into. If ``None``, a new figure and axis are created.
+    show_labels : bool, optional
+        Whether to draw label IDs at centroids. Default is ``True``.
+    show_centroids : bool, optional
+        Whether to mark centroids with dots. Default is ``False``.
+    centroids : Mapping[int, np.ndarray], optional
+        Precomputed centroid coordinates in ``(y, x)`` order. Used when ``im`` is
+        ``None``.
+    autoadjust_ax : bool, optional
+        If ``True``, autoscale the axis, invert the y-axis, and set equal aspect.
+        Leave ``False`` when drawing over an image to preserve image limits.
+    lw_scaling : tuple[str, Any], optional
+        Line-width scaling strategy. The first element can be ``"sqrt"`` or
+        ``"linear"``; the second is a multiplicative factor.
+    line_args, text_args, dot_args : dict, optional
+        Additional matplotlib styling arguments for edges, labels, and centroid
+        markers.
+
+    Returns
+    -------
+    line_segments : matplotlib.collections.LineCollection
+        Collection containing the drawn graph edges.
+    ax : matplotlib.axes.Axes
+        Axis containing the drawing.
+
+    Notes
+    -----
+    This is adapted from ``segmentation_processing.graph.draw_graph``. Image
+    coordinates are converted to matplotlib display coordinates by plotting
+    ``x`` horizontally and ``y`` vertically.
+    """
     line_args = {"color": "w", **(line_args or {})}
     text_args = {"color": "k", "ha": "center", "va": "center", **(text_args or {})}
     dot_args = {"color": "white", "markersize": 10, "marker": "o", **(dot_args or {})}
@@ -78,7 +123,25 @@ def draw_graph(
 
 
 def label_map(im, ax: Axes | None = None, background=0, **text_args) -> Axes:
-    """Annotate each non-background label at its centroid."""
+    """
+    Label each region in a labeled map at its centroid.
+
+    Parameters
+    ----------
+    im : np.ndarray
+        2-D integer label image.
+    ax : matplotlib.axes.Axes, optional
+        Axis to draw into. If ``None``, a new figure and axis are created.
+    background : int, optional
+        Background label to exclude. Default is ``0``.
+    **text_args
+        Extra keyword arguments passed to ``Axes.text``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axis containing the text annotations.
+    """
     _, ax = _fig_ax(ax)
     text_args = {"color": "k", "ha": "center", "va": "center", **text_args}
     for label, (cy, cx) in get_centroids(im, background=background).items():
@@ -99,7 +162,45 @@ def plot_label_image(
     interpolation: str = "nearest",
     **imshow_kwargs,
 ):
-    """Plot a label image, using graph coloring by default."""
+    """
+    Plot a label image with optional graph-based coloring.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    ax : matplotlib.axes.Axes, optional
+        Axis to draw into. If ``None``, a new figure and axis are created.
+    background : int, optional
+        Background label. Currently used by downstream helpers and kept for
+        plotting API consistency.
+    use_graph_coloring : bool, optional
+        If ``True`` (default), display labels through
+        :func:`labelimage_tools.coloring.show_map_with_colors` so adjacent labels
+        receive different colors. If ``False``, pass raw labels to ``imshow``.
+    K : int, optional
+        Desired graph-color palette size.
+    seed : int, optional
+        Random seed for graph-color refinement.
+    title : str, optional
+        Axis title.
+    show_colorbar : bool, optional
+        Whether to add a colorbar for the displayed image.
+    interpolation : str, optional
+        Interpolation passed to ``imshow``. Default is ``"nearest"``.
+    **imshow_kwargs
+        Additional keyword arguments passed to the image display function.
+
+    Returns
+    -------
+    fig, ax : tuple
+        Matplotlib figure and axis.
+
+    Notes
+    -----
+    The function never calls ``plt.show()``, making it suitable for scripts,
+    notebooks, and tests.
+    """
     fig, ax = _fig_ax(ax)
     if use_graph_coloring:
         image, _, ax = show_map_with_colors(
@@ -131,7 +232,30 @@ def plot_label_boundaries(
     linewidth: float = 0.5,
     title: str | None = None,
 ):
-    """Plot boundaries between labels over the current axes."""
+    """
+    Plot thick pixel boundaries between labels.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    ax : matplotlib.axes.Axes, optional
+        Axis to draw into.
+    background : int, optional
+        Background label. Present for API consistency; boundaries are computed
+        between all neighboring label values.
+    color : matplotlib color, optional
+        Boundary marker color.
+    linewidth : float, optional
+        Marker size used for boundary pixels.
+    title : str, optional
+        Axis title.
+
+    Returns
+    -------
+    fig, ax : tuple
+        Matplotlib figure and axis.
+    """
     fig, ax = _fig_ax(ax)
     boundaries = find_boundaries(np.asarray(labels), mode="thick")
     ys, xs = np.nonzero(boundaries)
@@ -151,7 +275,29 @@ def plot_contours(
     linewidth: float = 0.8,
     title: str | None = None,
 ):
-    """Plot ordered contours for each non-background label."""
+    """
+    Plot ordered contours for all non-background labels.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    ax : matplotlib.axes.Axes, optional
+        Axis to draw into.
+    background : int, optional
+        Label value to exclude. Default is ``0``.
+    color : matplotlib color, optional
+        Contour line color.
+    linewidth : float, optional
+        Contour line width.
+    title : str, optional
+        Axis title.
+
+    Returns
+    -------
+    fig, ax : tuple
+        Matplotlib figure and axis.
+    """
     fig, ax = _fig_ax(ax)
     for contour in ordered_contours_from_labels(labels, background=background).values():
         if len(contour):
@@ -172,7 +318,33 @@ def plot_junctions(
     show_junction_ids: bool = False,
     title: str | None = None,
 ):
-    """Plot junction coordinates over an optional label image."""
+    """
+    Plot junctions over an optional label image.
+
+    Parameters
+    ----------
+    labels : np.ndarray, optional
+        Label image to display in grayscale and/or use for junction detection.
+    junctions : list[Junction], optional
+        Precomputed junction objects. If omitted and ``labels`` is supplied,
+        junctions are computed with :func:`junctions_from_labels`.
+    junction_mask : np.ndarray, optional
+        Optional mask of junction pixels to draw as small yellow points.
+    ax : matplotlib.axes.Axes, optional
+        Axis to draw into.
+    background : int, optional
+        Background label passed to junction detection when ``junctions`` is not
+        supplied.
+    show_junction_ids : bool, optional
+        If ``True``, draw junction IDs at their centroids.
+    title : str, optional
+        Axis title.
+
+    Returns
+    -------
+    fig, ax : tuple
+        Matplotlib figure and axis.
+    """
     fig, ax = _fig_ax(ax)
     if labels is not None:
         ax.imshow(labels, cmap="gray", interpolation="nearest")
@@ -201,7 +373,25 @@ def plot_junctions(
 
 
 def plot_adjacency_graph(labels, *, ax: Axes | None = None, background=0, eight: bool = True):
-    """Convenience wrapper: show label image and overlay its adjacency graph."""
+    """
+    Plot a graph-colored label image with its adjacency graph overlaid.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    ax : matplotlib.axes.Axes, optional
+        Axis to draw into.
+    background : int, optional
+        Background label excluded from adjacency. Default is ``0``.
+    eight : bool, optional
+        Whether adjacency should use 8-neighborhood contacts.
+
+    Returns
+    -------
+    fig, ax : tuple
+        Matplotlib figure and axis.
+    """
     fig, ax = plot_label_image(labels, ax=ax, background=background)
     neighbors = adjacency_from_labels(labels, background=background, eight=eight)
     draw_graph(labels, neighbors, ax=ax)

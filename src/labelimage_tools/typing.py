@@ -1,3 +1,10 @@
+"""Shared type aliases for label-image graph utilities.
+
+The aliases here describe generic label-image adjacency/contact structures.
+They intentionally avoid vertex-model-specific concepts such as edges, faces, or
+``VertexModelGraph``.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping

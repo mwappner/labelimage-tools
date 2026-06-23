@@ -30,7 +30,32 @@ def _bbox_for_label(labels: np.ndarray, label: int, pad_y: int = 0, pad_x: int =
 
 
 def erode_labels(im, structure=None, background=0) -> np.ndarray:
-    """Erode each non-background label independently."""
+    """
+    Erode each labeled region independently using binary erosion.
+
+    Parameters
+    ----------
+    im : np.ndarray
+        2-D integer array representing a labeled map.
+    structure : int or np.ndarray, optional
+        Structuring element used for erosion. If an integer is provided, a square
+        structuring element of that size is used. If ``None``, a 3×3 square
+        structuring element is used.
+    background : int, optional
+        Label value representing background. Default is ``0``.
+
+    Returns
+    -------
+    np.ndarray
+        Label image with each non-background object eroded. Pixels removed by
+        erosion become ``background``. Small regions may disappear completely.
+
+    Notes
+    -----
+    This is adapted from ``segmentation_processing.img_treatment.erode_labels``.
+    Unlike the original implementation, this version does not assume labels are
+    consecutive; labels such as ``0, 5, 10`` are handled safely.
+    """
     labels = validate_label_image(im, background=background)
     structure = _structure(structure)
     out = np.full(labels.shape, background, dtype=labels.dtype)
@@ -44,11 +69,34 @@ def erode_labels(im, structure=None, background=0) -> np.ndarray:
 
 
 def dilate_labels(im, structure=None, background=0, background_only: bool = True) -> np.ndarray:
-    """Dilate each label independently.
+    """
+    Dilate each labeled region independently using binary dilation.
 
-    If ``background_only`` is true, labels expand only into background pixels. Otherwise labels
-    may overwrite each other in ascending label order, matching the behavior of the source
-    implementation.
+    Parameters
+    ----------
+    im : np.ndarray
+        2-D integer array representing a labeled map.
+    structure : int or np.ndarray, optional
+        Structuring element used for dilation. If an integer is provided, a square
+        structuring element of that size is used. If ``None``, a 3×3 square
+        structuring element is used.
+    background : int, optional
+        Label value representing background. Default is ``0``.
+    background_only : bool, optional
+        If ``True`` (default), labels expand only into pixels that were
+        ``background`` in the input. If ``False``, dilation may overwrite other
+        labels in ascending label order, matching the behavior of the source
+        implementation.
+
+    Returns
+    -------
+    np.ndarray
+        Dilated label image.
+
+    Notes
+    -----
+    This function is the correctly spelled public version of the original
+    ``dialate_labels`` helper. The old spelling is kept as an alias below.
     """
     labels = validate_label_image(im, background=background)
     structure = _structure(structure)
@@ -69,12 +117,42 @@ def dilate_labels(im, structure=None, background=0, background_only: bool = True
 
 
 def dialate_labels(im, structure=None, background=0, background_only: bool = True) -> np.ndarray:
-    """Deprecated spelling kept as a behavior-preserving alias for ``dilate_labels``."""
+    """
+    Behavior-preserving misspelled alias for :func:`dilate_labels`.
+
+    The original helper in ``segmentation_processing.img_treatment`` was named
+    ``dialate_labels``. New code should use :func:`dilate_labels`, but this alias
+    is kept because existing internal notebooks and scripts may still use the
+    misspelled name.
+    """
     return dilate_labels(im, structure=structure, background=background, background_only=background_only)
 
 
 def shuffle_labels(im, seed=None, background=None) -> np.ndarray:
-    """Randomly permute label values, optionally preserving the background label."""
+    """
+    Randomly shuffle label values in a label image.
+
+    Parameters
+    ----------
+    im : np.ndarray
+        2-D integer array representing a labeled map.
+    seed : int, optional
+        Random seed for reproducible shuffling.
+    background : int, optional
+        Background label to preserve. If provided, this label maps to itself and
+        is not included in the random permutation. If ``None``, every label is
+        eligible for shuffling.
+
+    Returns
+    -------
+    np.ndarray
+        Label image with the same spatial regions but permuted label values.
+
+    Notes
+    -----
+    Label values are shuffled directly; labels are not compacted or made
+    consecutive.
+    """
     labels = validate_label_image(im, background=background if background is not None else 0)
     rng = np.random.default_rng(seed)
     values = np.unique(labels)
@@ -93,11 +171,36 @@ def fill_internal_gaps_edt(
     max_distance=None,
     fill_value: int = 10_000,
 ) -> np.ndarray:
-    """Fill internal background holes with nearest labels using Euclidean distance.
+    """
+    Fill internal background holes with nearest labels using Euclidean distance.
 
-    Internal gaps are connected background components fully enclosed by foreground. If
-    ``max_distance`` is provided, far pixels inside a hole receive sentinel labels starting at
-    ``fill_value`` instead of a neighboring real label.
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    background : int, optional
+        Background label. Default is ``0``.
+    max_distance : float, optional
+        If ``None``, all pixels in internal holes are filled with the nearest
+        foreground label. If provided, only hole pixels whose nearest-foreground
+        distance is at most ``max_distance`` are filled with real labels.
+        Farther pixels receive sentinel labels.
+    fill_value : int, optional
+        First sentinel label assigned to far pixels when ``max_distance`` is
+        provided. Each far connected hole component receives ``fill_value``,
+        then ``fill_value + 1``, and so on.
+
+    Returns
+    -------
+    np.ndarray
+        Copy of ``labels`` with internal background gaps filled.
+
+    Notes
+    -----
+    "Internal gaps" are background connected components fully enclosed by
+    foreground. Background connected to the image border is not filled. This
+    preserves the sentinel-label mechanism from the source implementation, which
+    is useful for marking large holes without assigning them to real cells.
     """
     labels = validate_label_image(labels, background=background)
     fg = labels != background
@@ -137,7 +240,25 @@ def fill_internal_gaps_edt(
 
 
 def skeletonize_dilate(labels, background=0) -> np.ndarray:
-    """Return one-pixel exterior borders labeled by the adjacent object label."""
+    """
+    Produce a one-pixel exterior border around each label.
+
+    The border pixels are assigned the label of the object they border. To get a
+    binary skeletonized image, use ``out != background`` on the returned array.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    background : int, optional
+        Background label. Default is ``0``.
+
+    Returns
+    -------
+    np.ndarray
+        Label image containing exterior border pixels for each non-background
+        label.
+    """
     labels = validate_label_image(labels, background=background)
     out = np.full(labels.shape, background, dtype=labels.dtype)
     struct = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)
@@ -152,7 +273,25 @@ def skeletonize_dilate(labels, background=0) -> np.ndarray:
 
 
 def skeletonize_erode(labels, background=0) -> np.ndarray:
-    """Return one-pixel interior borders labeled by the owning object label."""
+    """
+    Produce a one-pixel interior border for each label.
+
+    The border pixels are assigned the label of the object they belong to. To get
+    a binary skeletonized image, use ``out != background`` on the returned array.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    background : int, optional
+        Background label. Default is ``0``.
+
+    Returns
+    -------
+    np.ndarray
+        Label image containing interior border pixels for each non-background
+        label.
+    """
     labels = validate_label_image(labels, background=background)
     out = np.full(labels.shape, background, dtype=labels.dtype)
     struct = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)
@@ -167,7 +306,27 @@ def skeletonize_erode(labels, background=0) -> np.ndarray:
 
 
 def skeletonize_labels(labels, background=0, kind: str = "interior") -> np.ndarray:
-    """Skeletonize labels with ``kind='interior'`` or ``kind='exterior'``."""
+    """
+    Produce a one-pixel skeleton of each label.
+
+    This is a convenience wrapper around :func:`skeletonize_erode` and
+    :func:`skeletonize_dilate`.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    background : int, optional
+        Background label. Default is ``0``.
+    kind : {"interior", "exterior"}, optional
+        ``"interior"`` returns the eroded/interior skeleton. ``"exterior"``
+        returns the dilated/exterior skeleton.
+
+    Returns
+    -------
+    np.ndarray
+        Skeletonized label image.
+    """
     if kind == "interior":
         return skeletonize_erode(labels, background=background)
     if kind == "exterior":
@@ -176,7 +335,30 @@ def skeletonize_labels(labels, background=0, kind: str = "interior") -> np.ndarr
 
 
 def find_non_self_connected_labels(im, background=0, connectivity: int = 1) -> dict[int, np.ndarray]:
-    """Return labels with multiple disconnected components and their component centroids."""
+    """
+    Find labels whose pixels form more than one connected component.
+
+    Parameters
+    ----------
+    im : np.ndarray
+        2-D integer label image.
+    background : int, optional
+        Label value to ignore. Default is ``0``.
+    connectivity : int, optional
+        Connectivity passed to :func:`scipy.ndimage.generate_binary_structure`.
+        In 2-D, ``1`` is 4-connectivity and ``2`` is 8-connectivity.
+
+    Returns
+    -------
+    dict[int, np.ndarray]
+        Mapping ``label -> component centroids`` for labels with multiple
+        disconnected blobs. Centroids are in image coordinates ``(y, x)``.
+
+    Notes
+    -----
+    This is adapted from the source function of the same name, but the label
+    lookup no longer assumes consecutive labels.
+    """
     labels = validate_label_image(im, background=background)
     structure = ndi.generate_binary_structure(labels.ndim, connectivity)
     bad = {}
@@ -195,7 +377,28 @@ def find_non_self_connected_labels(im, background=0, connectivity: int = 1) -> d
 
 
 def remove_non_self_connected_bits(im, background=0, connectivity: int = 1) -> np.ndarray:
-    """Keep the largest connected component of each label and set smaller bits to background."""
+    """
+    Remove disconnected fragments from labels.
+
+    For each non-background label, connected components are computed within that
+    label. If a label has more than one component, only the largest component is
+    kept and all smaller components are relabeled as ``background``.
+
+    Parameters
+    ----------
+    im : np.ndarray
+        2-D integer label image.
+    background : int, optional
+        Background label. Default is ``0``.
+    connectivity : int, optional
+        Connectivity for component labeling. In 2-D, ``1`` is 4-connectivity and
+        ``2`` is 8-connectivity.
+
+    Returns
+    -------
+    np.ndarray
+        Cleaned label image.
+    """
     labels = validate_label_image(im, background=background)
     structure = ndi.generate_binary_structure(labels.ndim, connectivity)
     cleaned = labels.copy()
@@ -213,7 +416,28 @@ def remove_non_self_connected_bits(im, background=0, connectivity: int = 1) -> n
 
 
 def crop_to_foreground_bbox(im, background=0, padding: int = 20) -> tuple[np.ndarray, tuple[slice, slice]]:
-    """Crop to non-background foreground plus padding and return ``(cropped, slices)``."""
+    """
+    Crop a label image to the foreground bounding box plus padding.
+
+    Parameters
+    ----------
+    im : np.ndarray
+        2-D integer label image.
+    background : int, optional
+        Background label. Default is ``0``.
+    padding : int, optional
+        Number of pixels to include on each side of the foreground bounding box.
+        The image is never expanded, so actual padding may be smaller near image
+        borders.
+
+    Returns
+    -------
+    cropped : np.ndarray
+        View/copy-like slice of the input containing all non-background pixels
+        plus available padding.
+    slices : tuple[slice, slice]
+        Row and column slices used to produce ``cropped``.
+    """
     labels = validate_label_image(im, background=background)
     rows = np.any(labels != background, axis=1)
     cols = np.any(labels != background, axis=0)
@@ -237,7 +461,42 @@ def load_image_pipeline(
     dilate_borders: bool = False,
     shuffle: bool = False,
 ) -> np.ndarray:
-    """Load and optionally crop, clean, hole-fill, dilate, and shuffle a label image."""
+    """
+    Load a label image and run the standard cleaning pipeline.
+
+    The pipeline mirrors the source ``img_treatment.load_image_pipeline`` helper:
+    load the image, optionally crop to foreground, remove disconnected label
+    fragments, fill internal holes, optionally dilate borders, and optionally
+    shuffle label values.
+
+    Parameters
+    ----------
+    path : str or os.PathLike
+        Path to a labeled image file.
+    seed : int, optional
+        Random seed used when ``shuffle=True``.
+    background : int, optional
+        Background label. Default is ``0``.
+    connectivity : int, optional
+        Connectivity used for disconnected-fragment cleanup.
+    crop_to_foreground : bool, optional
+        If ``True``, crop to the non-background bounding box before other
+        operations.
+    remove_small_bits : bool, optional
+        If ``True``, remove disconnected fragments of each label.
+    fill_holes : bool, optional
+        If ``True``, fill internal background holes using
+        :func:`fill_internal_gaps_edt`.
+    dilate_borders : bool, optional
+        If ``True``, dilate labels into background and fill any new internal gaps.
+    shuffle : bool, optional
+        If ``True``, randomly permute label values while preserving background.
+
+    Returns
+    -------
+    np.ndarray
+        Processed label image.
+    """
     im = load_img(path)
     if crop_to_foreground:
         im, _ = crop_to_foreground_bbox(im, background=background, padding=5)

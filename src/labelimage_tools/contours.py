@@ -7,7 +7,27 @@ from .validation import unique_labels, validate_label_image
 
 
 def ordered_contour_from_mask(mask) -> np.ndarray:
-    """Return the longest ordered contour of a boolean mask in ``(y, x)`` coordinates."""
+    """
+    Extract the longest ordered contour from a boolean mask.
+
+    Parameters
+    ----------
+    mask : array-like
+        Boolean or boolean-like 2-D mask for one object.
+
+    Returns
+    -------
+    np.ndarray
+        ``(n_points, 2)`` floating-point contour coordinates in image order
+        ``(y, x)``. If no contour is found, an empty ``(0, 2)`` array is
+        returned.
+
+    Notes
+    -----
+    This helper is new in ``labelimage-tools``. It wraps
+    :func:`skimage.measure.find_contours` and selects the longest contour, which
+    is usually the exterior boundary for a single connected label mask.
+    """
     mask = np.asarray(mask, dtype=bool)
     contours = measure.find_contours(mask.astype(float), 0.5)
     if not contours:
@@ -16,7 +36,27 @@ def ordered_contour_from_mask(mask) -> np.ndarray:
 
 
 def ordered_contours_from_labels(labels, *, background=0) -> dict[int, np.ndarray]:
-    """Return longest ordered contour for each non-background label."""
+    """
+    Extract one ordered contour for each non-background label.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    background : int, optional
+        Label value to exclude. Default is ``0``.
+
+    Returns
+    -------
+    dict[int, np.ndarray]
+        Mapping ``label -> contour``. Each contour is an ``(n_points, 2)`` array
+        in ``(y, x)`` order.
+
+    Notes
+    -----
+    Labels do not need to be consecutive. Each label is converted to a boolean
+    mask and passed to :func:`ordered_contour_from_mask`.
+    """
     labels = validate_label_image(labels, background=background)
     return {
         int(label): ordered_contour_from_mask(labels == label)

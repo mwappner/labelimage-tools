@@ -17,7 +17,23 @@ except Exception:  # pragma: no cover
 
 @dataclass(frozen=True)
 class Junction:
-    """Clustered label-image junction in image coordinates."""
+    """
+    Clustered junction in a labeled image.
+
+    Attributes
+    ----------
+    id : int
+        Junction identifier. IDs are 1-based by default so ``0`` can remain
+        "no junction" in a junction-label image.
+    yx : np.ndarray
+        Floating-point subpixel centroid of the junction cluster in image
+        coordinates ``(y, x)``.
+    pixel_coords : np.ndarray
+        Integer pixel coordinates belonging to the junction cluster, with shape
+        ``(n_pixels, 2)`` and coordinate order ``(y, x)``.
+    labels : frozenset[int]
+        Set of cell/region labels observed around the junction pixels.
+    """
 
     id: int
     yx: np.ndarray
@@ -75,10 +91,32 @@ def junction_pixels_with_labels(
     background=None,
     min_labels: int = 3,
 ) -> tuple[np.ndarray, dict[int, np.ndarray]]:
-    """Find pixels whose 3×3 neighborhood contains at least ``min_labels`` labels.
+    """
+    Find junction pixels and record labels visible at each such pixel.
 
-    If ``background`` is not ``None``, that label is excluded before counting. The default
-    preserves the source behavior and lets background participate in junction detection.
+    A junction pixel is any pixel whose padded 3×3 neighborhood contains at
+    least ``min_labels`` distinct labels. This preserves the behavior of
+    ``vertexify.find_junctions._junction_pixels_with_labels``.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    background : int, optional
+        If provided, this label is removed from the neighborhood before labels
+        are counted. If ``None`` (default), background participates in the count,
+        matching the source implementation.
+    min_labels : int, optional
+        Minimum number of distinct labels required to mark a pixel as a junction.
+        Default is ``3``.
+
+    Returns
+    -------
+    junction_mask : np.ndarray
+        Boolean mask with ``True`` at junction pixels.
+    labels_at_pixel : dict[int, np.ndarray]
+        Mapping from flattened pixel index ``y * width + x`` to the sorted unique
+        labels observed in that pixel's 3×3 neighborhood.
     """
     labels = validate_label_image(labels, background=0 if background is None else background)
     h, w = labels.shape
@@ -115,7 +153,34 @@ def cluster_junctions_with_labels(
     connectivity: int = 2,
     start_id: int = 1,
 ) -> tuple[np.ndarray, list[Junction]]:
-    """Cluster junction pixels and union the label sets in each cluster."""
+    """
+    Cluster junction pixels into geometric junction objects.
+
+    Connected components of ``junction_mask`` become individual junctions. The
+    centroid of each component is the mean of its member pixel coordinates, and
+    the junction's label set is the union of the label sets recorded for those
+    pixels.
+
+    Parameters
+    ----------
+    junction_mask : np.ndarray
+        Boolean mask of junction pixels.
+    labels_at_pixel : dict[int, np.ndarray]
+        Mapping produced by :func:`junction_pixels_with_labels`.
+    connectivity : int, optional
+        Connectivity passed to ``skimage.measure.label``. In 2-D, ``2`` gives
+        8-connectivity and is the default.
+    start_id : int, optional
+        First junction ID. Default is ``1``.
+
+    Returns
+    -------
+    junction_label_image : np.ndarray
+        Integer image where each junction component is labeled by its junction
+        ID and non-junction pixels are ``0``.
+    junctions : list[Junction]
+        Clustered junction objects.
+    """
     mask = np.asarray(junction_mask, dtype=bool)
     if not np.any(mask):
         return np.zeros(mask.shape, dtype=np.int64), []
@@ -149,7 +214,30 @@ def merge_close_junctions(
     epsilon: float,
     start_id: int = 1,
 ) -> list[Junction]:
-    """Merge junctions within ``epsilon`` pixels by averaging coordinates and unioning labels."""
+    """
+    Merge junctions closer than ``epsilon`` pixels.
+
+    Parameters
+    ----------
+    junctions : iterable[Junction]
+        Junctions to merge.
+    epsilon : float
+        Distance threshold in pixels. Junctions whose centroids are within this
+        distance are grouped together.
+    start_id : int, optional
+        First ID assigned to the merged junction list.
+
+    Returns
+    -------
+    list[Junction]
+        Merged junctions. Coordinates are averaged, pixel coordinates are
+        concatenated, and label sets are unioned within each merged group.
+
+    Notes
+    -----
+    This adapts the source ``_merge_close_vertices`` behavior to return public
+    :class:`Junction` objects rather than parallel coordinate/label arrays.
+    """
     junctions = list(junctions)
     if epsilon <= 0 or len(junctions) <= 1:
         return [
@@ -201,7 +289,42 @@ def junctions_from_labels(
     merge_epsilon: float = 0.0,
     start_id: int = 1,
 ) -> tuple[np.ndarray, list[Junction]]:
-    """Detect, cluster, and optionally merge junctions in a label image."""
+    """
+    Detect, cluster, and optionally merge junctions in a label image.
+
+    Algorithm
+    ---------
+    1. Scan a padded 3×3 window around every pixel and mark pixels whose
+       neighborhood contains at least ``min_labels`` distinct labels.
+    2. Cluster connected groups of such pixels.
+    3. Assign each cluster a subpixel centroid and the union of labels observed
+       around its member pixels.
+    4. Optionally merge nearby junctions when ``merge_epsilon > 0``.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        2-D integer label image.
+    background : int, optional
+        Background label to exclude from junction-label counting. If ``None``
+        (default), all labels participate.
+    min_labels : int, optional
+        Minimum distinct label count needed to mark a junction pixel.
+    connectivity : int, optional
+        Connectivity used to cluster junction pixels.
+    merge_epsilon : float, optional
+        If greater than zero, merge junction centroids within this distance.
+    start_id : int, optional
+        First junction ID in the returned junction-label image.
+
+    Returns
+    -------
+    junction_label_image : np.ndarray
+        Integer image with 1-based junction IDs and ``0`` elsewhere.
+    junctions : list[Junction]
+        Public junction objects containing centroids, member pixels, and label
+        sets.
+    """
     mask, labels_at_pixel = junction_pixels_with_labels(
         labels, background=background, min_labels=min_labels
     )

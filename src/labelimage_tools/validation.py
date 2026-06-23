@@ -4,7 +4,36 @@ import numpy as np
 
 
 def validate_label_image(labels, *, background=0) -> np.ndarray:
-    """Return ``labels`` as an array after validating it is a 2-D integer label image."""
+    """
+    Validate and return a 2-D integer label image as a NumPy array.
+
+    Parameters
+    ----------
+    labels : array-like
+        Candidate labeled image. The array must be two-dimensional and contain
+        integer label values. Floating arrays are accepted only when every finite
+        value is exactly integer-like, in which case they are cast to ``int64``.
+    background : int, optional
+        Label value used as background. The value is validated for sanity but the
+        image is not required to contain it. Default is ``0``.
+
+    Returns
+    -------
+    np.ndarray
+        The validated label image. Integer inputs are returned as arrays without
+        relabeling; integer-like floating inputs are returned as ``int64``.
+
+    Raises
+    ------
+    ValueError
+        If the input is not 2-D, contains non-integer values, or uses a non-finite
+        background label.
+
+    Notes
+    -----
+    Labels do not need to be consecutive. Values such as ``0, 5, 10`` are valid
+    and are preserved.
+    """
     array = np.asarray(labels)
     if array.ndim != 2:
         raise ValueError(f"label image must be 2-D, got shape {array.shape}")
@@ -23,7 +52,25 @@ def validate_label_image(labels, *, background=0) -> np.ndarray:
 
 
 def unique_labels(labels, *, background=0, include_background: bool = False) -> np.ndarray:
-    """Return sorted unique labels, optionally excluding the background label."""
+    """
+    Return sorted unique labels from a 2-D label image.
+
+    Parameters
+    ----------
+    labels : array-like
+        Candidate labeled image accepted by :func:`validate_label_image`.
+    background : int, optional
+        Label value to treat as background. Default is ``0``.
+    include_background : bool, optional
+        If ``False`` (default), remove ``background`` from the returned values.
+        If ``True``, include it when present.
+
+    Returns
+    -------
+    np.ndarray
+        Sorted unique label values. The original integer label values are
+        preserved; no consecutiveness is assumed.
+    """
     array = validate_label_image(labels, background=background)
     values = np.unique(array)
     if not include_background:
