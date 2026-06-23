@@ -31,15 +31,18 @@ python -m pytest
 
 ## Load and preprocess labels
 
-Use these helpers directly from scripts or notebooks.
+Use these helpers directly from scripts or notebooks. The intended starting
+point is `load_image_pipeline(...)`: with its defaults, it crops foreground,
+removes disconnected bits of repeated labels, and fills internal gaps. This
+prepares the image so labels are clean, self-connected, unique regions that are
+ready for adjacency, contour, and junction operations, with neighboring labels
+touching across filled internal gaps rather than being separated by stray
+background holes.
 
 ```python
 import labelimage_tools as lit
 
-labels = lit.load_label_image("segmentation.tif")
-labels = lit.dilate_labels(labels, structure=3, background=0, background_only=True)
-labels = lit.fill_internal_gaps_edt(labels, background=0, max_distance=3)
-labels, crop_slices = lit.crop_to_foreground_bbox(labels, background=0, padding=20)
+labels = lit.load_image_pipeline("segmentation.tif")
 ```
 
 ## Adjacency and contact graph
@@ -119,6 +122,8 @@ workflows and embeds the generated images.
 Graph-colored label image using the cyclic `managua` colormap:
 
 ```python
+labels = lit.load_image_pipeline("samples/test_cells2D.tif")
+
 fig, ax = lit.plot_label_image(
     labels,
     use_graph_coloring=True,
@@ -135,6 +140,7 @@ fig, ax = lit.plot_label_image(
 Detected junctions:
 
 ```python
+labels = lit.load_image_pipeline("samples/test_cells2D.tif")
 junction_label_image, junctions = lit.junctions_from_labels(
     labels,
     background=0,
@@ -150,6 +156,7 @@ lit.plot_junctions(junctions=junctions, junction_mask=junction_label_image > 0, 
 Ordered contours:
 
 ```python
+labels = lit.load_image_pipeline("samples/test_cells2D.tif")
 contours = lit.ordered_contours_from_labels(labels, background=0)
 fig, ax = lit.plot_label_image(labels, cmap="managua", cyclic_cmap=True)
 lit.plot_contours(labels, ax=ax, background=0, color="black", linewidth=0.6)

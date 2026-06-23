@@ -17,8 +17,11 @@ Core snippet:
 ```python
 import labelimage_tools as lit
 
-labels = lit.load_label_image("samples/test_cells2D.tif")
-labels, _ = lit.crop_to_foreground_bbox(labels, background=0, padding=10)
+# The default pipeline crops foreground, removes disconnected fragments,
+# and fills internal gaps so labels are clean, self-connected, unique regions
+# ready for adjacency, contour, and junction operations. Neighboring labels
+# touch across filled internal gaps instead of being separated by stray holes.
+labels = lit.load_image_pipeline("samples/test_cells2D.tif")
 
 fig, ax = lit.plot_label_image(
     labels,
@@ -49,6 +52,8 @@ python examples/02_preprocessing_gallery.py
 Core snippet:
 
 ```python
+labels = lit.load_image_pipeline("samples/test_cells2D.tif")
+
 eroded = lit.erode_labels(labels, structure=3, background=0)
 dilated = lit.dilate_labels(labels, structure=3, background=0, background_only=True)
 interior = lit.skeletonize_labels(labels, background=0, kind="interior")
@@ -82,6 +87,8 @@ python examples/03_junctions_and_contours.py
 Core snippet:
 
 ```python
+labels = lit.load_image_pipeline("samples/test_cells2D.tif")
+
 junction_label_image, junctions = lit.junctions_from_labels(
     labels,
     background=0,
@@ -99,6 +106,8 @@ lit.plot_junctions(junctions=junctions, junction_mask=junction_label_image > 0, 
 Contours are returned in image-coordinate order `(y, x)`. The plotting helper converts them to matplotlib display coordinates when drawing.
 
 ```python
+labels = lit.load_image_pipeline("samples/test_cells2D.tif")
+
 contours = lit.ordered_contours_from_labels(labels, background=0)
 fig, ax = lit.plot_label_image(labels, cmap="managua", cyclic_cmap=True)
 lit.plot_contours(labels, ax=ax, background=0, color="black", linewidth=0.6)

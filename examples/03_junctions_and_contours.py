@@ -33,8 +33,7 @@ def save_figure(fig, filename: str) -> Path:
 
 
 def main() -> list[Path]:
-    labels = lit.load_label_image(SAMPLE_PATH)
-    labels, _ = lit.crop_to_foreground_bbox(labels, background=BACKGROUND, padding=10)
+    labels = lit.load_image_pipeline(SAMPLE_PATH)
     junction_label_image, junctions = lit.junctions_from_labels(
         labels,
         background=BACKGROUND,
