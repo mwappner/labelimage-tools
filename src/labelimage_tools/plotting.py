@@ -117,7 +117,7 @@ def draw_graph(
     ax.add_collection(collection)
     if autoadjust_ax:
         ax.autoscale()
-        ax.set_ylim(ax.get_ylim()[::-1])
+        ax.set_ylim(ax.get_ylim()[::-1]) # type: ignore
         ax.set_aspect("equal")
     return collection, ax
 
@@ -360,7 +360,7 @@ def plot_junctions(
         if labels is not None:
             _, junctions = junctions_from_labels(labels, background=background)
         else:
-            coords = np.argwhere(junction_mask)
+            coords = np.argwhere(junction_mask) # type: ignore
             junctions = [
                 Junction(1, coords.mean(axis=0), coords.astype(np.int64), frozenset())
             ] if len(coords) else []

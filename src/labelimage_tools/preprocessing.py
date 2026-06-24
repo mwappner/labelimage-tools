@@ -5,8 +5,9 @@ from os import PathLike
 import numpy as np
 from scipy import ndimage as ndi
 
+from ._bbox import label_slices
 from .io import load_img
-from .validation import unique_labels, validate_label_image
+from .validation import validate_label_image
 
 
 def _structure(structure=None) -> np.ndarray:
@@ -15,18 +16,6 @@ def _structure(structure=None) -> np.ndarray:
     if isinstance(structure, int):
         return np.ones((structure, structure), dtype=bool)
     return np.asarray(structure, dtype=bool)
-
-
-def _bbox_for_label(labels: np.ndarray, label: int, pad_y: int = 0, pad_x: int = 0):
-    coords = np.argwhere(labels == label)
-    if coords.size == 0:
-        return None
-    y0, x0 = coords.min(axis=0)
-    y1, x1 = coords.max(axis=0) + 1
-    return (
-        slice(max(0, y0 - pad_y), min(labels.shape[0], y1 + pad_y)),
-        slice(max(0, x0 - pad_x), min(labels.shape[1], x1 + pad_x)),
-    )
 
 
 def erode_labels(im, structure=None, background=0) -> np.ndarray:
@@ -59,10 +48,7 @@ def erode_labels(im, structure=None, background=0) -> np.ndarray:
     labels = validate_label_image(im, background=background)
     structure = _structure(structure)
     out = np.full(labels.shape, background, dtype=labels.dtype)
-    for label in unique_labels(labels, background=background):
-        slc = _bbox_for_label(labels, int(label))
-        if slc is None:
-            continue
+    for label, slc in label_slices(labels, background=background).items():
         sub = labels[slc] == label
         out[slc][ndi.binary_erosion(sub, structure=structure)] = label
     return out
@@ -103,10 +89,8 @@ def dilate_labels(im, structure=None, background=0, background_only: bool = True
     rowpad, colpad = structure.shape[0] // 2, structure.shape[1] // 2
     out = labels.copy()
     bg_mask = labels == background
-    for label in unique_labels(labels, background=background):
-        slc = _bbox_for_label(labels, int(label), rowpad, colpad)
-        if slc is None:
-            continue
+    slices = label_slices(labels, background=background, padding=max(rowpad, colpad))
+    for label, slc in slices.items():
         sub = labels[slc] == label
         dilated = ndi.binary_dilation(sub, structure=structure)
         if background_only:
@@ -125,7 +109,12 @@ def dialate_labels(im, structure=None, background=0, background_only: bool = Tru
     is kept because existing internal notebooks and scripts may still use the
     misspelled name.
     """
-    return dilate_labels(im, structure=structure, background=background, background_only=background_only)
+    return dilate_labels(
+        im,
+        structure=structure,
+        background=background,
+        background_only=background_only,
+    )
 
 
 def shuffle_labels(im, seed=None, background=None) -> np.ndarray:
@@ -214,18 +203,16 @@ def fill_internal_gaps_edt(
     if not np.any(holes):
         return labels.copy()
 
-    distances, inds = ndi.distance_transform_edt(~fg, return_distances=True, return_indices=True)
+    distances, inds = ndi.distance_transform_edt(~fg, return_distances=True, return_indices=True)  # type: ignore (linter thinks this could return None)
     assign_all_bg = labels[tuple(inds)]
-    cc, n_cc = ndi.label(holes)
+    cc, n_cc = ndi.label(holes) # type: ignore (linter think we could get None returned here)
     if n_cc == 0:
         return labels.copy()
     if max_distance is None:
         out[holes] = assign_all_bg[holes]
         return out
 
-    for idx, slc in enumerate(ndi.find_objects(cc), start=1):
-        if slc is None:
-            continue
+    for idx, slc in label_slices(cc, background=0).items():
         hole_mask = cc[slc] == idx
         sub_dist = distances[slc]
         sub_assign = assign_all_bg[slc]
@@ -262,10 +249,7 @@ def skeletonize_dilate(labels, background=0) -> np.ndarray:
     labels = validate_label_image(labels, background=background)
     out = np.full(labels.shape, background, dtype=labels.dtype)
     struct = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)
-    for label in unique_labels(labels, background=background):
-        slc = _bbox_for_label(labels, int(label), 1, 1)
-        if slc is None:
-            continue
+    for label, slc in label_slices(labels, background=background, padding=1).items():
         sub = labels[slc] == label
         border = ndi.binary_dilation(sub, structure=struct) & (~sub)
         out[slc][border] = label
@@ -295,10 +279,7 @@ def skeletonize_erode(labels, background=0) -> np.ndarray:
     labels = validate_label_image(labels, background=background)
     out = np.full(labels.shape, background, dtype=labels.dtype)
     struct = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)
-    for label in unique_labels(labels, background=background):
-        slc = _bbox_for_label(labels, int(label))
-        if slc is None:
-            continue
+    for label, slc in label_slices(labels, background=background).items():
         sub = labels[slc] == label
         border = (~ndi.binary_erosion(sub, structure=struct)) & sub
         out[slc][border] = label
@@ -334,7 +315,11 @@ def skeletonize_labels(labels, background=0, kind: str = "interior") -> np.ndarr
     raise ValueError("kind must be 'interior' or 'exterior'")
 
 
-def find_non_self_connected_labels(im, background=0, connectivity: int = 1) -> dict[int, np.ndarray]:
+def find_non_self_connected_labels(
+    im,
+    background=0,
+    connectivity: int = 1,
+) -> dict[int, np.ndarray]:
     """
     Find labels whose pixels form more than one connected component.
 
@@ -362,12 +347,9 @@ def find_non_self_connected_labels(im, background=0, connectivity: int = 1) -> d
     labels = validate_label_image(im, background=background)
     structure = ndi.generate_binary_structure(labels.ndim, connectivity)
     bad = {}
-    for label in unique_labels(labels, background=background):
-        slc = _bbox_for_label(labels, int(label), 1, 1)
-        if slc is None:
-            continue
+    for label, slc in label_slices(labels, background=background, padding=1).items():
         sub = labels[slc] == label
-        cc_labels, n_cc = ndi.label(sub, structure=structure)
+        cc_labels, n_cc = ndi.label(sub, structure=structure)  # type: ignore (linter thinks this could return None)
         if n_cc > 1:
             centers = ndi.center_of_mass(sub, cc_labels, index=range(1, n_cc + 1))
             bad[int(label)] = np.asarray(
@@ -402,12 +384,12 @@ def remove_non_self_connected_bits(im, background=0, connectivity: int = 1) -> n
     labels = validate_label_image(im, background=background)
     structure = ndi.generate_binary_structure(labels.ndim, connectivity)
     cleaned = labels.copy()
-    for label in unique_labels(labels, background=background):
-        slc = _bbox_for_label(labels, int(label), 1, 1)
-        if slc is None:
-            continue
+    for label, slc in label_slices(labels, background=background, padding=1).items():
         sub = labels[slc] == label
-        cc_labels, n_cc = ndi.label(sub, structure=structure)
+        cc_labels, n_cc = ndi.label(
+            sub,
+            structure=structure,
+        )  # type: ignore (linter thinks this could return None)
         if n_cc > 1:
             sizes = ndi.sum(sub, cc_labels, index=range(1, n_cc + 1))
             largest = int(np.argmax(sizes)) + 1
@@ -415,7 +397,11 @@ def remove_non_self_connected_bits(im, background=0, connectivity: int = 1) -> n
     return cleaned
 
 
-def crop_to_foreground_bbox(im, background=0, padding: int = 20) -> tuple[np.ndarray, tuple[slice, slice]]:
+def crop_to_foreground_bbox(
+    im,
+    background=0,
+    padding: int = 20,
+) -> tuple[np.ndarray, tuple[slice, slice]]:
     """
     Crop a label image to the foreground bounding box plus padding.
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.spatial import cKDTree
+from scipy.spatial import cKDTree # type: ignore
 from skimage.measure import label as cc_label
 
 from .validation import validate_label_image
@@ -82,7 +82,7 @@ if njit is not None:
         return mask
 
 else:
-    _numba_junction_mask_core = None
+    _numba_junction_mask_core = None # type: ignore
 
 
 def junction_pixels_with_labels(
@@ -188,7 +188,7 @@ def cluster_junctions_with_labels(
     h, w = mask.shape
     junction_label_image = np.zeros(mask.shape, dtype=np.int64)
     junctions: list[Junction] = []
-    for offset, component_id in enumerate(np.unique(component_labels[component_labels > 0])):
+    for offset, component_id in enumerate(np.unique(component_labels[component_labels > 0])): # type: ignore
         jid = start_id + offset
         coords = np.argwhere(component_labels == component_id)
         junction_label_image[component_labels == component_id] = jid

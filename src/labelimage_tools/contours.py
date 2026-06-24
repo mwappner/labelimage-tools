@@ -3,7 +3,8 @@ from __future__ import annotations
 import numpy as np
 from skimage import measure
 
-from .validation import unique_labels, validate_label_image
+from ._bbox import label_slices
+from .validation import validate_label_image
 
 
 def ordered_contour_from_mask(mask) -> np.ndarray:
@@ -54,11 +55,24 @@ def ordered_contours_from_labels(labels, *, background=0) -> dict[int, np.ndarra
 
     Notes
     -----
-    Labels do not need to be consecutive. Each label is converted to a boolean
-    mask and passed to :func:`ordered_contour_from_mask`.
+    Labels do not need to be consecutive. Each label is cropped to its local
+    bounding box before being converted to a boolean mask and passed to
+    :func:`ordered_contour_from_mask`.
     """
     labels = validate_label_image(labels, background=background)
-    return {
-        int(label): ordered_contour_from_mask(labels == label)
-        for label in unique_labels(labels, background=background)
-    }
+    contours = {}
+    slices = label_slices(
+        labels,
+        background=background,
+        include_background=False,
+        padding=1,
+    )
+    for label, slc in slices.items():
+        submask = labels[slc] == label
+        contour = ordered_contour_from_mask(submask)
+        if contour.size:
+            contour = contour.copy()
+            contour[:, 0] += slc[0].start
+            contour[:, 1] += slc[1].start
+        contours[label] = contour
+    return contours
