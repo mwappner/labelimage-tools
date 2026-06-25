@@ -61,12 +61,11 @@ def ordered_contours_from_labels(labels, *, background=0) -> dict[int, np.ndarra
     """
     labels = validate_label_image(labels, background=background)
     contours = {}
-    slices = label_slices(
-        labels,
-        background=background,
-        include_background=False,
-        padding=1,
-    )
+
+    # find objects (slices croping single label to its bounding box)
+    slices = label_slices(labels, background=background, include_background=False, padding=1)
+    
+    # extract contours for each label
     for label, slc in slices.items():
         submask = labels[slc] == label
         contour = ordered_contour_from_mask(submask)

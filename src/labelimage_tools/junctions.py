@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from scipy import ndimage as ndi
 from scipy.spatial import cKDTree # type: ignore
 from skimage.measure import label as cc_label
 
@@ -179,29 +180,54 @@ def cluster_junctions_with_labels(
         Integer image where each junction component is labeled by its junction
         ID and non-junction pixels are ``0``.
     junctions : list[Junction]
-        Clustered junction objects.
+        Clustered junction objects. Each object has an ID matching
+        ``junction_label_image``, a mean ``(y, x)`` coordinate, all member pixel
+        coordinates, and the union of labels observed around those pixels.
     """
     mask = np.asarray(junction_mask, dtype=bool)
     if not np.any(mask):
         return np.zeros(mask.shape, dtype=np.int64), []
+
+    # Component labels are dense positive integers, so scipy's object-finding
+    # helper gives one local bounding box per component in component-id order.
     component_labels = cc_label(mask, connectivity=connectivity)
+    objects = ndi.find_objects(component_labels)
+
     h, w = mask.shape
     junction_label_image = np.zeros(mask.shape, dtype=np.int64)
     junctions: list[Junction] = []
-    for offset, component_id in enumerate(np.unique(component_labels[component_labels > 0])): # type: ignore
-        jid = start_id + offset
-        coords = np.argwhere(component_labels == component_id)
-        junction_label_image[component_labels == component_id] = jid
+
+    for component_id, slc in enumerate(objects, start=1):
+        if slc is None:
+            continue
+
+        # Restrict the component mask lookup to its crop rather than scanning
+        # the full image once per component.
+        sub = component_labels[slc] # type: ignore
+        local_y, local_x = np.nonzero(sub == component_id)
+        if local_y.size == 0:
+            continue
+
+        y = local_y + slc[0].start
+        x = local_x + slc[1].start
+        coords = np.column_stack([y, x]).astype(np.int64)
+
+        # IDs remain compact even if scipy ever returns an empty/None slot.
+        jid = start_id + len(junctions)
+        junction_label_image[y, x] = jid
+
+        # Union the labels recorded around each pixel in the component.
         label_set: set[int] = set()
         for yy, xx in coords:
             vals = labels_at_pixel.get(int(yy) * w + int(xx))
             if vals is not None:
                 label_set.update(int(value) for value in vals)
+
         junctions.append(
             Junction(
                 id=jid,
                 yx=coords.mean(axis=0).astype(float),
-                pixel_coords=coords.astype(np.int64),
+                pixel_coords=coords,
                 labels=frozenset(label_set),
             )
         )
