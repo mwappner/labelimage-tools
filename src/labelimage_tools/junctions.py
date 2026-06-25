@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy import ndimage as ndi
-from scipy.spatial import cKDTree # type: ignore
+from scipy.spatial import KDTree
 from skimage.measure import label as cc_label
 
 from .validation import validate_label_image
@@ -271,7 +271,7 @@ def merge_close_junctions(
             for i, j in enumerate(junctions)
         ]
     positions = np.asarray([j.yx for j in junctions], dtype=float)
-    tree = cKDTree(positions)
+    tree = KDTree(positions)
     pairs = tree.query_pairs(epsilon)
     parent = np.arange(len(junctions))
 
