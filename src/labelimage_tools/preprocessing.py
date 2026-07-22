@@ -203,9 +203,10 @@ def fill_internal_gaps_edt(
     fg = labels != background
     out = labels.copy()
 
-    # Sentinel labels must not collide with real labels.
+    # Sentinel labels must not collide with real labels when a threshold can
+    # actually leave sentinel-filled pixels.
     max_label = int(labels.max()) if labels.size else 0
-    if fill_value != "background" and fill_value <= max_label:
+    if max_distance is not None and fill_value != "background" and fill_value <= max_label:
         raise ValueError("fill_value must be larger than all existing labels")
 
     # Internal holes are background components fully enclosed by foreground.

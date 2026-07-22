@@ -231,10 +231,14 @@ def save_label_graph_from_labels(
     allow_background_contacts=False,
     include_centroids=True,
     include_pixel_counts=True,
+    bridge_holes=False,
+    max_hole_area=None,
+    max_hole_distance=None,
+    inferred_contact=1.0,
     format="auto",
     **metadata,
 ) -> None:
-    """Build and save label graph data directly from a label image."""
+    """Build and save graph data, including its construction settings."""
     neighbors, contacts, centroids, pixel_counts = graph_from_labels(
         labels,
         background=background,
@@ -243,6 +247,10 @@ def save_label_graph_from_labels(
         allow_background_contacts=allow_background_contacts,
         include_centroids=include_centroids,
         include_pixel_counts=include_pixel_counts,
+        bridge_holes=bridge_holes,
+        max_hole_area=max_hole_area,
+        max_hole_distance=max_hole_distance,
+        inferred_contact=inferred_contact,
     )
     construction_metadata = {
         "background": background,
@@ -251,6 +259,10 @@ def save_label_graph_from_labels(
         "allow_background_contacts": allow_background_contacts,
         "include_centroids": include_centroids,
         "include_pixel_counts": include_pixel_counts,
+        "bridge_holes": bridge_holes,
+        "max_hole_area": max_hole_area,
+        "max_hole_distance": max_hole_distance,
+        "inferred_contact": inferred_contact,
     }
     construction_metadata.update(metadata)
     save_label_graph(

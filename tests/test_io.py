@@ -115,6 +115,10 @@ def test_save_label_graph_from_labels_preserves_construction_metadata(tmp_path):
         path,
         labels,
         eight=False,
+        bridge_holes=True,
+        max_hole_area=25,
+        max_hole_distance=3.5,
+        inferred_contact=2.0,
         source_image="labels.tif",
     )
     loaded = lit.load_label_graph(path)
@@ -123,6 +127,10 @@ def test_save_label_graph_from_labels_preserves_construction_metadata(tmp_path):
     assert loaded.centroids is not None
     assert loaded.pixel_counts == lit.label_pixel_counts(labels)
     assert loaded.metadata["eight"] is False
+    assert loaded.metadata["bridge_holes"] is True
+    assert loaded.metadata["max_hole_area"] == 25
+    assert loaded.metadata["max_hole_distance"] == 3.5
+    assert loaded.metadata["inferred_contact"] == 2.0
     assert loaded.metadata["source_image"] == "labels.tif"
 
 

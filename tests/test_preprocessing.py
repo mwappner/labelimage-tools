@@ -60,6 +60,12 @@ def test_fill_internal_gaps_background_respects_custom_background():
     assert filled[2, 2] == 3
 
 
+def test_fill_internal_gaps_without_threshold_allows_high_labels():
+    labels = np.full((5, 5), 20_000, dtype=np.int64)
+    labels[2, 2] = 0
+    assert np.all(lit.fill_internal_gaps_edt(labels, max_distance=None) == 20_000)
+
+
 def test_replace_labels_maps_background_and_handles_missing_labels():
     labels = np.array([[0, 5, 10], [10, 5, 0]], dtype=np.uint8)
     original = labels.copy()
