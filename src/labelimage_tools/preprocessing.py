@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 from os import PathLike
+from typing import Literal
 
 import numpy as np
 from scipy import ndimage as ndi
 
 from ._bbox import label_slices
 from .io import load_img
-from .validation import validate_label_image, unique_labels, validate_label_mapping, validate_label_value
 from .typing import LabelValue
-
-from typing import Literal
+from .validation import (
+    unique_labels,
+    validate_label_image,
+    validate_label_mapping,
+    validate_label_value,
+)
 
 
 def _structure(structure=None) -> np.ndarray:
@@ -162,7 +166,7 @@ def fill_internal_gaps_edt(
     labels,
     background=0,
     max_distance=None,
-    fill_value: int | Literal['background'] = 10_000,
+    fill_value: int | Literal["background"] = 10_000,
 ) -> np.ndarray:
     """
     Fill internal background holes with nearest labels using Euclidean distance.
@@ -193,7 +197,7 @@ def fill_internal_gaps_edt(
     Notes
     -----
     "Internal gaps" are background connected components fully enclosed by
-    foreground. Background connected to the image border is not filled. 
+    foreground. Background connected to the image border is not filled.
     """
     labels = validate_label_image(labels, background=background)
     fg = labels != background
@@ -201,7 +205,7 @@ def fill_internal_gaps_edt(
 
     # Sentinel labels must not collide with real labels.
     max_label = int(labels.max()) if labels.size else 0
-    if fill_value != 'background' and fill_value <= max_label:
+    if fill_value != "background" and fill_value <= max_label:
         raise ValueError("fill_value must be larger than all existing labels")
 
     # Internal holes are background components fully enclosed by foreground.
@@ -211,14 +215,19 @@ def fill_internal_gaps_edt(
         return labels.copy()
 
     # Compute nearest-foreground assignments for all background pixels once.
-    distances, inds = ndi.distance_transform_edt(~fg, return_distances=True, return_indices=True)  # type: ignore (linter thinks this could return None)
+    distances, inds = ndi.distance_transform_edt(
+        ~fg,
+        return_distances=True,
+        return_indices=True,
+    )  # type: ignore (linter thinks this could return None)
     assign_all_bg = labels[tuple(inds)]
 
-    # Label connected components within the internal holes to potentially handle each hole separately.
-    cc, n_cc = ndi.label(holes) # type: ignore (linter think we could get None returned here)
+    # Label connected components within the internal holes so thresholded holes
+    # can receive distinct sentinel values.
+    cc, n_cc = ndi.label(holes)  # type: ignore (linter thinks this could return None)
     if n_cc == 0:
         return labels.copy()
-    
+
     # Without a threshold, every internal hole pixel receives its nearest
     # real label directly.
     if max_distance is None:
@@ -226,7 +235,7 @@ def fill_internal_gaps_edt(
         return out
 
     # Work hole by hole when a distance threshold can leave sentinel regions.
-    hole_sentinel = background if fill_value == 'background' else fill_value
+    hole_sentinel = background if fill_value == "background" else fill_value
     for idx, slc in label_slices(cc, background=0).items():
         hole_mask = cc[slc] == idx
         sub_dist = distances[slc]
@@ -240,7 +249,7 @@ def fill_internal_gaps_edt(
             out[slc][close] = sub_assign[close]
         if np.any(far):
             out[slc][far] = hole_sentinel
-            if fill_value != 'background':
+            if fill_value != "background":
                 hole_sentinel += 1  # Increment for the next far hole component.
     return out
 
@@ -529,17 +538,23 @@ def load_image_pipeline(
     return im
 
 
-def replace_labels(im, mapping, *, background=0, default_missing: LabelValue | None = 0) -> np.ndarray:
+def replace_labels(
+    im,
+    mapping,
+    *,
+    background=0,
+    default_missing: LabelValue | None = 0,
+) -> np.ndarray:
     """
     Replace label values in a label image according to a mapping.
 
-    Conceptually, this function performs
-    ```python
-    for old_label, new_label in mapping.items():
-        im[im == old_label] = new_label
-    ```
-    but it uses a windowed approach to avoid creating a full-size boolean mask for each label, 
-    which accelerates processing significantly for large images with many labels.
+    Conceptually, this function performs::
+
+        for old_label, new_label in mapping.items():
+            im[im == old_label] = new_label
+
+    It uses a windowed approach to avoid creating a full-size boolean mask for
+    each label, which accelerates processing for large images with many labels.
 
     Parameters
     ----------
@@ -551,8 +566,8 @@ def replace_labels(im, mapping, *, background=0, default_missing: LabelValue | N
     background : int, optional
         Background label. Default is ``0``.
     default_missing : int, optional
-        Default value for labels not in the mapping. If None, keep the original value.
-          Default is ``0``.
+        Default value for labels not in the mapping. If ``None``, keep the
+        original value. Default is ``0``.
 
     Returns
     -------
@@ -564,7 +579,7 @@ def replace_labels(im, mapping, *, background=0, default_missing: LabelValue | N
     background = validate_label_value(background, name="background")
     mapping = validate_label_mapping(mapping)
     if default_missing is not None:
-        default_missing = validate_label_value(default_missing,name="default_missing")
+        default_missing = validate_label_value(default_missing, name="default_missing")
 
     # Get the output dtype that can accommodate all input types
     dtype_parts = [labels.dtype, np.asarray(background).dtype]
@@ -585,7 +600,12 @@ def replace_labels(im, mapping, *, background=0, default_missing: LabelValue | N
     include_background = background in mapping
 
     # Map labels
-    for old_label, slc in label_slices(labels, background=background, include_background=include_background).items():
+    slices = label_slices(
+        labels,
+        background=background,
+        include_background=include_background,
+    )
+    for old_label, slc in slices.items():
         if old_label in mapping:
             new_label = mapping[old_label]
             out[slc][labels[slc] == old_label] = new_label
@@ -593,9 +613,8 @@ def replace_labels(im, mapping, *, background=0, default_missing: LabelValue | N
             # Use default value if not in mapping
             missing_sentinel = default_missing if default_missing is not None else old_label
             out[slc][labels[slc] == old_label] = missing_sentinel
-
-
     return out
+
 
 def image_has_holes(labels, background=0) -> tuple[bool, np.ndarray]:
     """
@@ -608,7 +627,7 @@ def image_has_holes(labels, background=0) -> tuple[bool, np.ndarray]:
     labels : np.ndarray
         2-D integer label image.
     background : int, optional
-        Background label. Default is ``0``. 
+        Background label. Default is ``0``.
 
     Returns
     -------
@@ -617,19 +636,22 @@ def image_has_holes(labels, background=0) -> tuple[bool, np.ndarray]:
     holes : np.ndarray of bool
         Boolean mask of internal hole pixels.
     """
-    
     labels = validate_label_image(labels, background=background)
     fg = labels != background
 
     # Internal holes are background components fully enclosed by foreground.
     filled_fg = ndi.binary_fill_holes(fg)
     holes = filled_fg & (~fg)
-    has_holes =  bool(np.any(holes))
+    has_holes = bool(np.any(holes))
 
     return has_holes, holes
 
 
-def image_has_hole_sentinel(labels, background=0, hole_sentinel: LabelValue | None = 10_000) -> tuple[bool, np.ndarray]:
+def image_has_hole_sentinel(
+    labels,
+    background=0,
+    hole_sentinel: LabelValue | None = 10_000,
+) -> tuple[bool, np.ndarray]:
     """
     Check whether a label image contains sentinel-filled internal holes.
 
@@ -638,26 +660,25 @@ def image_has_hole_sentinel(labels, background=0, hole_sentinel: LabelValue | No
     foreground. These sentinel labels are expected to start at
     ``hole_sentinel`` and continue with consecutive integer values.
 
-        Parameters
+    Parameters
     ----------
     labels : np.ndarray
         2-D integer label image.
     background : int, optional
         Background label. Default is ``0``.
     hole_sentinel : int or None, optional
-        The sentinel label used to fill holes. If None, sentinel label is derivedn form the
-        label distribution: if a continuos string of labels is present at the upper end of
-        the label distribution, and this string is separated by a significant gap from the
-        rest of the label distribution, then the first label in this string is used as the
-        sentinel label. If no such string is found, ValueError is raised.
+        The sentinel label used to fill holes. If ``None``, the sentinel label
+        is inferred from the label distribution: if a consecutive run occurs at
+        the upper end and is separated by a significant gap, its first label is
+        used. If no such run is found, ``ValueError`` is raised.
         Default is ``10_000``.
-    
+
     Returns
     -------
     bool
-        True if there are any internal holes that would be filled with sentinel labels, False otherwise.
+        Whether any sentinel labels are present.
     np.ndarray
-        Boolean array indicating the locations of the internal holes that would be filled with sentinel labels.
+        Boolean mask indicating the sentinel-label locations.
     """
     labels = validate_label_image(labels, background=background)
     ulabels = unique_labels(labels, background=background)

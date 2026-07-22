@@ -317,7 +317,10 @@ def plot_contours(
     Parameters
     ----------
     labels : np.ndarray
-        2-D integer label image.
+        2-D integer label image. May be ``None`` when ``contours`` is supplied.
+    contours : mapping, optional
+        Precomputed mapping of labels to ordered ``(row, column)`` contour
+        arrays. If omitted, contours are computed from ``labels``.
     ax : matplotlib.axes.Axes, optional
         Axis to draw into.
     background : int, optional

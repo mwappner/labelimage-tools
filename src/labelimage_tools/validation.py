@@ -46,7 +46,7 @@ def validate_label_image(labels, *, background=0) -> np.ndarray:
                 raise ValueError("label image values must be integers")
         else:
             raise ValueError("label image values must be integers")
-    
+
     validate_label_value(background, name="background")
 
     return array
@@ -77,6 +77,7 @@ def unique_labels(labels, *, background=0, include_background: bool = False) -> 
     if not include_background:
         values = values[values != background]
     return values
+
 
 def validate_label_value(value, *, name: str = "label") -> int:
     """Validate and normalize a scalar label value.
@@ -114,6 +115,7 @@ def validate_label_value(value, *, name: str = "label") -> int:
             return int(rounded)
 
     raise ValueError(f"{name} must be integer-like")
+
 
 def validate_label_mapping(mapping, *, name: str = "mapping") -> dict[int, int]:
     """Validate and normalize a label replacement mapping."""
