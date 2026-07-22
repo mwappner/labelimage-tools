@@ -10,6 +10,8 @@ from .io import load_img
 from .validation import validate_label_image, unique_labels, validate_label_mapping, validate_label_value
 from .typing import LabelValue
 
+from typing import Literal
+
 
 def _structure(structure=None) -> np.ndarray:
     if structure is None:
@@ -160,7 +162,7 @@ def fill_internal_gaps_edt(
     labels,
     background=0,
     max_distance=None,
-    fill_value: int = 10_000,
+    fill_value: int | Literal['background'] = 10_000,
 ) -> np.ndarray:
     """
     Fill internal background holes with nearest labels using Euclidean distance.
@@ -176,10 +178,12 @@ def fill_internal_gaps_edt(
         foreground label. If provided, only hole pixels whose nearest-foreground
         distance is at most ``max_distance`` are filled with real labels.
         Farther pixels receive sentinel labels.
-    fill_value : int, optional
+    fill_value : int | Literal['background'], optional
         First sentinel label assigned to far pixels when ``max_distance`` is
         provided. Each far connected hole component receives ``fill_value``,
-        then ``fill_value + 1``, and so on.
+        then ``fill_value + 1``, and so on. If ``fill_value='background'``,
+        far pixels are filled with the background label instead of sentinel
+        labels. Default is ``10_000``.
 
     Returns
     -------
@@ -197,7 +201,7 @@ def fill_internal_gaps_edt(
 
     # Sentinel labels must not collide with real labels.
     max_label = int(labels.max()) if labels.size else 0
-    if fill_value <= max_label:
+    if fill_value != 'background' and fill_value <= max_label:
         raise ValueError("fill_value must be larger than all existing labels")
 
     # Internal holes are background components fully enclosed by foreground.
@@ -210,16 +214,19 @@ def fill_internal_gaps_edt(
     distances, inds = ndi.distance_transform_edt(~fg, return_distances=True, return_indices=True)  # type: ignore (linter thinks this could return None)
     assign_all_bg = labels[tuple(inds)]
 
-    # Work hole by hole when a distance threshold can leave sentinel regions.
+    # Label connected components within the internal holes to potentially handle each hole separately.
     cc, n_cc = ndi.label(holes) # type: ignore (linter think we could get None returned here)
     if n_cc == 0:
         return labels.copy()
+    
+    # Without a threshold, every internal hole pixel receives its nearest
+    # real label directly.
     if max_distance is None:
-        # Without a threshold, every internal hole pixel receives its nearest
-        # real label directly.
         out[holes] = assign_all_bg[holes]
         return out
 
+    # Work hole by hole when a distance threshold can leave sentinel regions.
+    hole_sentinel = background if fill_value == 'background' else fill_value
     for idx, slc in label_slices(cc, background=0).items():
         hole_mask = cc[slc] == idx
         sub_dist = distances[slc]
@@ -232,8 +239,9 @@ def fill_internal_gaps_edt(
         if np.any(close):
             out[slc][close] = sub_assign[close]
         if np.any(far):
-            out[slc][far] = fill_value
-            fill_value += 1
+            out[slc][far] = hole_sentinel
+            if fill_value != 'background':
+                hole_sentinel += 1  # Increment for the next far hole component.
     return out
 
 
